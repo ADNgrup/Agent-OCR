@@ -1,9 +1,13 @@
 from typing import Dict, Any, List, Optional
 from modules.ocr.interface import OCRResult
+from modules.ocr.layout import LayoutProcessor
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from datetime import datetime
 import logging
 import os
 import json
-from datetime import datetime
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +43,6 @@ class OCRProcessor:
         self.llm_provider = llm_provider
     
     def process_fast(self, input_path: str) -> OCRResult:
-        import time
         start_time = time.time()
         
         pipeline_steps = []
@@ -49,31 +52,52 @@ class OCRProcessor:
         if not glm_ocr:
             raise ValueError("GLM-OCR engine required for fast mode")
         
-        logger.info("Fast mode: Step 1 - GLM-OCR text extraction")
-        glm_result = glm_ocr.process(input_path, task="text")
-        pipeline_steps.append('glm-ocr')
+        if not self.llm_provider:
+            raise ValueError("LLM provider required for fast mode")
         
-        ocr_text = glm_result.text
-        confidence = glm_result.confidence
+        logger.info("Fast mode: Parallel execution - Step 1 (Visual) + Step 2 (OCR)")
         
-        if self.llm_provider and hasattr(self.llm_provider, 'analyze_context'):
-            logger.info("Fast mode: Step 2 - Qwen3VL context analysis")
-            try:
-                qwen_response = self.llm_provider.analyze_context(input_path, ocr_text)
-                pipeline_steps.append('qwen3-vl-context')
-                ocr_text = qwen_response.text
-                    
-            except Exception as e:
-                logger.warning(f"Qwen3VL analysis failed: {str(e)}")
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_visual = executor.submit(
+                self.llm_provider.detect_visual_elements,
+                input_path
+            )
+            
+            future_ocr = executor.submit(
+                glm_ocr.process,
+                input_path,
+                task="text"
+            )
+            
+            visual_response = future_visual.result()
+            glm_result = future_ocr.result()
+        
+        pipeline_steps.extend(['qwen3-vl-visual', 'glm-ocr'])
+        
+        logger.info("Fast mode: Step 3 - Integration")
+        try:
+            final_response = self.llm_provider.integrate_results(
+                input_path,
+                visual_response.text,
+                glm_result.text
+            )
+            pipeline_steps.append('qwen3-vl-integration')
+            ocr_text = final_response.text
+            confidence = glm_result.confidence
+        except Exception as e:
+            logger.warning(f"Integration failed: {str(e)}, using GLM text only")
+            ocr_text = glm_result.text
+            confidence = glm_result.confidence
         
         result = OCRResult(
             text=ocr_text,
             boxes=[],
             confidence=confidence,
             metadata={
-                'mode': 'fast',
+                'mode': 'fast-parallel',
                 'pipeline': pipeline_steps,
-                'engine': 'glm-ocr+qwen3vl'
+                'engine': 'qwen3vl+glm-ocr',
+                'visual_elements': visual_response.text
             }
         )
         
@@ -83,10 +107,7 @@ class OCRProcessor:
         return result
     
     def process_thinking(self, input_path: str) -> OCRResult:
-        import time
         start_time = time.time()
-        
-        from modules.ocr.layout import LayoutProcessor
         
         pipeline_steps = []
         
@@ -99,8 +120,6 @@ class OCRProcessor:
         blocks = []
         block_results = []
         
-        import os
-        from pathlib import Path
         file_ext = Path(input_path).suffix.lower()
         is_pdf = file_ext == '.pdf'
         

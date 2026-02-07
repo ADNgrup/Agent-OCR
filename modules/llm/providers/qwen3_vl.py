@@ -86,8 +86,13 @@ class Qwen3VLProvider(ILLMProvider):
             
             payload = {
                 "model": self.model,
-                "prompt": prompt,
-                "images": [image_base64],
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt,
+                        "images": [image_base64]
+                    }
+                ],
                 "stream": False
             }
             
@@ -95,7 +100,7 @@ class Qwen3VLProvider(ILLMProvider):
                 payload['options'] = {'temperature': kwargs['temperature']}
             
             response = requests.post(
-                f"{self.base_url}/api/generate",
+                f"{self.base_url}/api/chat",
                 json=payload
             )
             response.raise_for_status()
@@ -103,7 +108,7 @@ class Qwen3VLProvider(ILLMProvider):
             result = response.json()
             
             return LLMResponse(
-                text=result.get('response', ''),
+                text=result.get('message', {}).get('content', ''),
                 tokens_used=result.get('eval_count', 0),
                 metadata={
                     'model': self.model,
@@ -117,36 +122,66 @@ class Qwen3VLProvider(ILLMProvider):
             logger.error(f"Qwen3VL image generation failed: {str(e)}")
             raise
     
-    def analyze_context(self, image_path: str, ocr_text: str, **kwargs) -> LLMResponse:
-        prompt = f"""Analyze this image completely and extract ALL information.
+    def detect_visual_elements(self, image_path: str, **kwargs) -> LLMResponse:
+        prompt = """Identify ALL visual indicators and controls in this image:
 
-OCR Text Detected:
+## VISUAL ELEMENTS TO DETECT:
+
+**Switches & Buttons:**
+- Identify each switch/button
+- State: ON/OFF, Up/Down, Active/Inactive, Pressed/Released
+- Labels or positions
+
+**Dials & Gauges:**
+- Read needle positions
+- Current values shown
+- Min/max ranges
+- Units
+
+**Status Indicators:**
+- Lights: Color (Red/Green/Yellow/Blue), State (On/Off/Blinking)
+- Icons: Symbols, status markers
+- Visual alerts or warnings
+
+**Control Elements:**
+- Sliders: Positions
+- Knobs: Settings
+- Valve indicators: Positions or percentages
+- Any adjustable controls
+
+**Layout Markers:**
+- Section dividers
+- Color-coded zones
+- Visual groupings
+
+Output format:
+- List each visual element found
+- Describe state/value clearly
+- Use bullet points
+- Be specific about positions/states"""
+        
+        return self.generate_with_image(prompt, image_path, **kwargs)
+    
+    def integrate_results(self, image_path: str, visual_elements: str, ocr_text: str, **kwargs) -> LLMResponse:
+        prompt = f"""Integrate and format the following extracted data:
+
+**VISUAL ELEMENTS DETECTED:**
+{visual_elements}
+
+**OCR TEXT EXTRACTED:**
 {ocr_text}
 
-COMPREHENSIVE EXTRACTION:
+INTEGRATION TASKS:
 
-## 1. TEXT CONTENT
-- Extract all visible text accurately
-- Correct OCR errors (O→0, l→1 in numbers, ℃ typos)
-- Format tables with proper headers and alignment
-- Preserve lists, schedules, and structured data
-- Include units for all measurements
+1. Combine visual elements with OCR text
+2. Correct any OCR errors
+3. Match visual indicators to their labels/sections
+4. Format tables with proper headers
+5. Organize data hierarchically
+6. Include all measurements with units
+7. Present in clean, structured markdown
 
-## 2. VISUAL INDICATORS
-- **Switches**: Identify states (ON/OFF, Up/Down, Active/Inactive)
-- **Dials/Gauges**: Read needle positions, current values, ranges
-- **Status Lights**: Colors and states (Red/Green/Yellow, On/Off, Blinking/Solid)
-- **Buttons**: States (Pressed/Released, Enabled/Disabled)
-- **Indicators**: Any visual status markers, icons, symbols
-- **Control Elements**: Sliders, knobs, valve positions
-
-## 3. LAYOUT & STRUCTURE
-- Headers, titles, section labels
-- Table structures with column/row headers
-- Grouped information by zones, categories, or entities
-- Visual hierarchy and organization
-
-Provide complete extraction in clean markdown format with tables where appropriate."""
+Output a complete, well-formatted document."""
         
         return self.generate_with_image(prompt, image_path, **kwargs)
     
