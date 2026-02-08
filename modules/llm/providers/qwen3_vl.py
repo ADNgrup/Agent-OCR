@@ -127,108 +127,39 @@ class Qwen3VLProvider(ILLMProvider):
             raise
     
     def detect_visual_elements(self, image_path: str, **kwargs) -> LLMResponse:
-        prompt = """Describe ALL non-text visual elements in this image. Report ONLY what you see.
+        prompt = """Describe all non-text visual elements you see:
 
-## RULES:
-- Describe visual elements EXACTLY as they appear
-- DO NOT interpret, analyze, or infer meaning
-- DO NOT add business logic or reasoning
-- Report facts only: positions, colors, shapes, states
+- Buttons, switches, controls (positions, states)
+- Status lights, indicators (colors, on/off)
+- Charts, graphs, diagrams
+- Colors, borders, highlights
+- Any other visual elements
 
-## VISUAL ELEMENTS TO DETECT:
-
-**Interactive Controls (if present):**
-- Buttons, switches, toggles
-- Sliders, knobs, selectors
-- Checkboxes, radio buttons
-- Exact positions/states visible
-
-**Indicators & Status (if present):**
-- Status lights, LEDs (colors, on/off states)
-- Progress bars, gauges, meters
-- Icons, symbols, badges
-- Highlight colors or boxes
-
-**Charts & Graphics (if present):**
-- Chart types (bar, line, pie, etc.)
-- Axis labels, legends
-- Data points visible
-- Color coding
-
-**Layout & Structure:**
-- Borders, dividers, boxes
-- Background colors
-- Section groupings
-- Visual hierarchy
-
-**Images & Media (if present):**
-- Photos, illustrations
-- Logos, icons
-- Diagrams, flowcharts
-
-**Other Visual Elements:**
-- Handwritten marks
-- Stamps, seals
-- Signatures
-- Highlighting or annotations
-
-OUTPUT:
-- Use bullet points
-- Be specific and factual
-- Describe what you see, not what it means
-- If no special visual elements exist (plain text document), state: "No special visual elements detected"
-"""
+Be factual and specific. Report only what you see."""
         
         return self.generate_with_image(prompt, image_path, **kwargs)
     
     def integrate_results(self, image_path: str, visual_elements: str, ocr_text: str, **kwargs) -> LLMResponse:
-        prompt = f"""Combine visual description and OCR text into ONE complete document.
+        prompt = f"""Merge the following data into one structured document:
 
-**VISUAL ELEMENTS:**
+VISUAL ELEMENTS:
 {visual_elements}
 
-**OCR TEXT:**
+OCR TEXT:
 {ocr_text}
 
-## STRICT RULES:
-1. PRESERVE all information from both sources AS-IS
-2. DO NOT modify, correct, or change any values
-3. DO NOT add interpretation or analysis
-4. DO NOT infer meaning or add logic
-5. ONLY organize and format the data
-
-## TASKS:
-
-**1. Merge Information:**
-- Include ALL visual elements described
-- Include ALL text from OCR
-- If visual elements are labeled, match them to corresponding OCR text
-- If no visual elements, focus on formatting OCR text
-
-**2. Format Output:**
-- Use markdown headers (##, ###) for structure
-- Use tables for tabular data
-- Use bullet points for lists
-- Preserve all numbers, units, and formatting
-- Keep original language (don't translate)
-
-**3. Organization:**
-Document type determines structure:
-- **Forms/Applications**: Group by sections, preserve field-value pairs
-- **Invoices/Receipts**: Items, totals, dates, amounts
-- **Reports**: Headers, body, data sections
-- **Tables/Spreadsheets**: Preserve table structure
-- **UI/Dashboards**: Group by functional areas
-- **Plain documents**: Logical flow with headers
-
-**4. Completeness:**
-- ALL visual details included
-- ALL OCR text included
-- Nothing omitted, nothing modified
-- Well-structured and readable
+STRICT RULES:
+- Combine ALL information from both sources
+- Use markdown format (headers ##, tables, bullets)
+- Preserve all values EXACTLY as shown
+- Match visual elements to their OCR labels
+- DO NOT add any analysis, interpretation, or remarks
+- DO NOT add 備考, 注意, or any commentary sections
+- DO NOT explain what values mean
+- ONLY present the data as-is
 
 OUTPUT:
-Complete, comprehensive document in clean markdown format. NO analysis, NO modifications."""
+Complete document with all visual and text data organized clearly. NO additional commentary."""
         
         return self.generate_with_image(prompt, image_path, **kwargs)
     
