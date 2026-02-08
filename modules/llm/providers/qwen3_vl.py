@@ -140,26 +140,23 @@ Be factual and specific. Report only what you see."""
         return self.generate_with_image(prompt, image_path, **kwargs)
     
     def integrate_results(self, image_path: str, visual_elements: str, ocr_text: str, **kwargs) -> LLMResponse:
-        prompt = f"""Merge the following data into one structured document:
+        prompt = f"""Merge these two data sources into one document:
 
-VISUAL ELEMENTS:
-{visual_elements}
+VISUAL: {visual_elements}
+TEXT: {ocr_text}
 
-OCR TEXT:
-{ocr_text}
+OUTPUT FORMAT:
+- Use ## headers to organize sections
+- Use tables for structured data
+- Preserve ALL values exactly as given
 
-STRICT RULES:
-- Combine ALL information from both sources
-- Use markdown format (headers ##, tables, bullets)
-- Preserve all values EXACTLY as shown
-- Match visual elements to their OCR labels
-- DO NOT add any analysis, interpretation, or remarks
-- DO NOT add 備考, 注意, or any commentary sections
-- DO NOT explain what values mean
-- ONLY present the data as-is
+STRICT RULES - DO NOT:
+- Add sections like 機能説明, 注記, 特徴, 説明, カラーガイド
+- Explain what data means
+- Add analysis or interpretation
+- Add any commentary
 
-OUTPUT:
-Complete document with all visual and text data organized clearly. NO additional commentary."""
+ONLY merge and format the data."""
         
         return self.generate_with_image(prompt, image_path, **kwargs)
     
